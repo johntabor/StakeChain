@@ -3,11 +3,11 @@ public class Constants {
     /**
      * Number of transactions per a block
      */
-    public static final int BLOCK_SIZE = 2;
+    public static final int BLOCK_SIZE = 10;
     /**
      * Size of the Algorand committee
      */
-    public static final int COMMITTEE_SIZE = 2;
+    public static final int COMMITTEE_SIZE = 3;
     /**
      * Percentage of the committee needed for a block hash to win a vote
      */
@@ -15,7 +15,7 @@ public class Constants {
     /**
      * Total currency supply
      */
-    public static final int CURRENCY_SUPPLY = 1000;
+    public static final int CURRENCY_SUPPLY = 10000;
     /**
      * Initial Algorand round
      */

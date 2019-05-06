@@ -40,11 +40,14 @@ public class Algorand {
      */
     public static void runAlgorand() {
         while(true) {
+            if (round == 1) {
+                return;
+            }
             System.out.println("Round: " + round);
             Block highestPriorityBlock = runProposalStage();
-            System.out.println("highestPriorityBlockHash: " + Block.getHash(highestPriorityBlock));
-            System.out.println("highestPriorityBlock:\n" + highestPriorityBlock.toString());
-            runBAStar(highestPriorityBlock);
+            System.out.println("Hash of highest priority block proposal: " + Block.getHash(highestPriorityBlock));
+            //System.out.println("highestPriorityBlock:\n" + highestPriorityBlock.toString());
+            //runBAStar(highestPriorityBlock);
             round++;
         }
     }
@@ -60,6 +63,7 @@ public class Algorand {
                 e.printStackTrace();
             }
         }
+        System.out.println("Attempting to propose a block...");
         /* Attempt to propose a block */
         Block proposedBlock = null;
         if (ConnectionManager.transactionQueue.size() >= Constants.BLOCK_SIZE) {
@@ -68,12 +72,24 @@ public class Algorand {
                 proposedBlock = proposeBlock(priority);
             }
         }
+        System.out.println("Waiting for block proposals to roll in...");
         /* Wait PROPOSAL_TIMEOUT seconds for other block proposals to roll in */
+        int i = 0;
+        while(i < 5) {
+            try {
+                System.out.println("...");
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            i++;
+        }
+        /*
         try {
             Thread.sleep(Constants.PROPOSAL_TIMEOUT);
         } catch (InterruptedException e) {
             e.printStackTrace();
-        }
+        }*/
         /*
          * Obtain the highest priority block from the locally proposed block (if exists)
          * and proposals received from other nodes
@@ -89,7 +105,7 @@ public class Algorand {
                 highestPriorityProposalLock.unlock();
             }
         }
-
+        System.out.println("Processing received block proposals...");
         while(!ConnectionManager.proposedBlockQueue.isEmpty()) {
             try {
                 Block block = ConnectionManager.proposedBlockQueue.peek();
@@ -128,7 +144,7 @@ public class Algorand {
             transactions[0] = ConnectionManager.transactionQueue.take();
             transactions[1] = ConnectionManager.transactionQueue.take();
             Block block = new Block(transactions, Algorand.round, priority,"");
-            System.out.println("proposing block with hash: " + Block.getHash(block));
+            System.out.println("Proposing block with hash: " + Block.getHash(block));
             ConnectionManager.gossip(Message.MessageType.BLOCK, block, null);
             return block;
         } catch (InterruptedException e) {
@@ -165,18 +181,23 @@ public class Algorand {
         }
     }
 
-    public static void runBAStar(Block block) {
+    public static Block runBAStar(Block block) {
         System.out.println("block hash to send: " + Block.getHash(block));
         String blockHash = reduction(Block.getHash(block));
-        String blockHashStar = binaryBAStar(blockHash);
+        /*String blockHashStar = binaryBAStar(blockHash);
         String r = countVotes(Constants.VOTING_TIMEOUT);
         if (blockHashStar.compareTo(r) == 0) {
             // final consensus
+            System.out.println("Reached final consensus");
+            return block;
             //return BlockOfHash(hblockStar);
         } else {
             // tentative consensus
+            System.out.println("reached tentative consensus");
+            return block;
             //return BlockOfHash(hblockStar);
-        }
+        }*/
+        return block;
     }
 
     /**
@@ -186,6 +207,7 @@ public class Algorand {
      * @return agreed  upon hash
      */
     public static String reduction(String blockHash) {
+        System.out.println("Starting reduction");
         // step 1: gossip block hash and get votes
         committeeVote(0, blockHash);
         String popularHash = countVotes(Constants.VOTING_TIMEOUT);
@@ -229,7 +251,9 @@ public class Algorand {
                     } else {
                         votes.put(blockHash, 1);
                     }
-                    if (votes.get(blockHash) > (Constants.COMMITTEE_SIZE * Constants.COMMITTEE_SIZE_FACTOR)) {
+                    if (votes.get(blockHash) >= (Constants.COMMITTEE_SIZE * Constants.COMMITTEE_SIZE_FACTOR)) {
+                        System.out.println("found a winner");
+                        System.out.println("winner is: " + blockHash);
                         return blockHash;
                     }
                 }
@@ -264,6 +288,7 @@ public class Algorand {
     }
 
     private static String binaryBAStar(String blockHash) {
+        System.out.println("Starting binaryBAStar");
         int step = 1;
         String r = blockHash;
         String emptyHash = Block.getHash(Block.getEmptyBlock());
@@ -279,6 +304,7 @@ public class Algorand {
                 if (step == 1) {
                     committeeVote(step, r);
                 }
+                System.out.println("Returning here!!!!!");
                 return r;
             }
             step++;

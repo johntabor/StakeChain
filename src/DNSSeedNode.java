@@ -23,11 +23,13 @@ public class DNSSeedNode {
     public DNSSeedNode(int port) {
         this.port = port;
         Scanner sc = new Scanner(System.in);
-        System.out.println("Commands: (start) (stop) (quit)");
+        start();
+        System.out.println("Commands: (stop) (quit)");
         while(true) {
             System.out.print("> ");
             String input = sc.nextLine();
             switch(input) {
+                /*
                 case "start":
                     if (running) {
                         System.out.println("Server already running");
@@ -41,7 +43,7 @@ public class DNSSeedNode {
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
-                    break;
+                    break;*/
                 case "stop":
                     if (!running) {
                         System.out.println("Server already stopped");

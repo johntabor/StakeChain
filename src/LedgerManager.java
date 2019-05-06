@@ -29,14 +29,19 @@ public class LedgerManager {
      * Initializes the ledger by creating the genesis block
      */
     public static void start() {
-        Transaction[] transactions = new Transaction[Constants.BLOCK_SIZE];
-        transactions[0] = new Transaction(0,
-                "genesis", "Alice", 400);
-        transactions[1] = new Transaction(1,
-                "genesis", "Bob", 600);
-        Timestamp timestamp = new Timestamp(new Date().getTime());
-        genesis = new Block(transactions, -1, -1,"");
+        genesis = buildGenesis();
         ledger.add(genesis);
+    }
+
+    public static Block buildGenesis() {
+        Transaction[] transactions = new Transaction[Constants.BLOCK_SIZE];
+        for(int i = 0; i < Constants.BLOCK_SIZE; i++) {
+            String recipient = "address" + i;
+            transactions[i] = new Transaction(
+                    i, "genesis", recipient,
+                    Constants.CURRENCY_SUPPLY / Constants.BLOCK_SIZE);
+        }
+        return new Block(transactions, -1, -1, "");
     }
 
     /*

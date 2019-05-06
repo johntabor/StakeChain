@@ -42,6 +42,7 @@ public class ClientNode {
      */
     private void connect() {
         ConnectionManager.start();
+        LedgerManager.start();
         algorand = new Thread(new AlgorandRunnable());
         algorand.start();
         connected = true;
@@ -57,11 +58,13 @@ public class ClientNode {
 
     private void startCommandInterface() {
         Scanner sc = new Scanner(System.in);
-        System.out.println("Commands: (connect) (send <transaction>) (disconnect) (quit)");
+        System.out.println("Commands: (send <transaction>) (disconnect) (quit)");
+        connect();
         while(true) {
-            System.out.print("> ");
+            //System.out.print("> ");
             String input = sc.nextLine();
             switch(input) {
+                /*
                 case "connect":
                     if (connected) {
                         System.out.println("Client already connected");
@@ -76,6 +79,7 @@ public class ClientNode {
                         e.printStackTrace();
                     }
                     break;
+                 */
                 case "send":
                     if (!connected) {
                         System.out.println("Must connect to the network first");

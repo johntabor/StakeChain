@@ -1,9 +1,6 @@
 import java.io.IOException;
 import java.io.ObjectOutputStream;
-import java.net.ConnectException;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.net.SocketException;
+import java.net.*;
 
 /**
  * Runnable used for the thread that is responsible for sending messages
@@ -25,8 +22,9 @@ public class OutboundDataSenderRunnable implements Runnable {
                 outputStream.writeObject(message);
                 outputStream.flush();
             } catch (ConnectException e) {
-                // should the message be added back into the queue for retry?
-                // i'm going with no for now
+                // don't retry the message
+            } catch (NoRouteToHostException e) {
+                // don't retry the message
             } catch (SocketException e) {
                 e.printStackTrace();
             } catch (IOException e) {

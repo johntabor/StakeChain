@@ -14,12 +14,14 @@ public class Block implements Serializable {
     public final String prevBlockHash;
 
     private Block() {
-        this.transactions = null;
+        this.transactions = new Transaction[Constants.BLOCK_SIZE];
+        transactions[0] = new Transaction(-1, "", "", -1);
+        transactions[1] = new Transaction(-1, "", "", -1);
         this.round = -1;
         this.priority = -1;
         this.seed = -1;
         this.timestamp = null;
-        this.prevBlockHash = null;
+        this.prevBlockHash = "";
     }
 
     public Block(Transaction[] transactions, int round, int priority, String prevBlockHash) {

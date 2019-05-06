@@ -21,6 +21,8 @@ public class Main {
             DNSSeedNode seedNode = new DNSSeedNode(Constants.SEED_PORT);
         } else if (args[0].compareTo("client") == 0) {
             ClientNode client = new ClientNode(Integer.parseInt(args[1]), Integer.parseInt(args[2]));
+        } else if (args[0].compareTo("tester") == 0) {
+            Tester tester = new Tester();
         }
     }
 }

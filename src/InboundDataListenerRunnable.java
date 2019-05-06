@@ -110,8 +110,7 @@ public class InboundDataListenerRunnable implements Runnable {
             Set<Integer> excludedAddresses = new HashSet<>();
             excludedAddresses.add(message.relayAddress);
             excludedAddresses.add(message.sourceAddress);
-            ConnectionManager.gossip(message.relayAddress, excludedAddresses);
-            //ConnectionManager.gossipAddress(message.relayAddress);
+            ConnectionManager.gossip(Message.MessageType.ADDR, message.relayAddress, excludedAddresses);
         }
     }
 
@@ -134,13 +133,11 @@ public class InboundDataListenerRunnable implements Runnable {
      * @param message - message received from another client
      */
     private void transaction(Message message) {
-        System.out.println("Received a transaction");
         Transaction tx = message.transaction;
         if (!LedgerManager.seenTransaction(tx)) {
             Set<Integer> excludedAddresses = new HashSet<>();
             excludedAddresses.add(message.sourceAddress);
-            ConnectionManager.gossip(tx, excludedAddresses);
-            //ConnectionManager.gossipTransaction(tx);
+            ConnectionManager.gossip(Message.MessageType.TRANSACTION, tx, excludedAddresses);
             ConnectionManager.transactionQueue.add(tx);
         }
     }
@@ -153,9 +150,10 @@ public class InboundDataListenerRunnable implements Runnable {
         Algorand.highestPriorityProposalLock.lock();
         try {
             if (message.block.priority > Algorand.highestPriorityProposal) {
+                Algorand.highestPriorityProposal = message.block.priority;
                 Set<Integer> excludedAddresses = new HashSet<>();
                 excludedAddresses.add(message.sourceAddress);
-                ConnectionManager.gossip(message.block, excludedAddresses);
+                ConnectionManager.gossip(Message.MessageType.BLOCK, message.block, excludedAddresses);
                 ConnectionManager.proposedBlockQueue.add(message.block);
             }
         } finally {
