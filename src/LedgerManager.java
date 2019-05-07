@@ -74,6 +74,8 @@ public class LedgerManager {
 
 
     private static void addBlock(Block block) {
+        //block.prevBlockHash
+        ledger.add(block);
         // validate eventually
         //bloch.
         //block.hash = blockHash(block);

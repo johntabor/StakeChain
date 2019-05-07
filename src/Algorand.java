@@ -1,9 +1,12 @@
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+
+import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 
+class Steps {
+    public static final int REDUCTION_ONE = -1;
+    public static final int REDUCTION_TWO = 0;
+    public static final int FINAL = 1000;
+}
 
 /**
  * Thread that runs the Algorand consensus algorithm
@@ -29,9 +32,9 @@ public class Algorand {
      */
     public static ReentrantLock highestPriorityProposalLock = new ReentrantLock();
     /**
-     * Stores votes for block hashes for current step of BA*
+     * Block proposals seen. Helps the node track down a block by its hash.
      */
-    //public static Map<String, Integer> votes = new HashMap<>();
+    private static Map<String, Block> blockProposals = new HashMap<>();
 
     /**
      * Main method for Algorand. Has two stages:
@@ -46,8 +49,14 @@ public class Algorand {
             System.out.println("Round: " + round);
             Block highestPriorityBlock = runProposalStage();
             System.out.println("Hash of highest priority block proposal: " + Block.getHash(highestPriorityBlock));
-            //System.out.println("highestPriorityBlock:\n" + highestPriorityBlock.toString());
-            //runBAStar(highestPriorityBlock);
+            Block winner = runBAStar(highestPriorityBlock);
+            System.out.println("Hash of winning block: " + Block.getHash(winner));
+            System.out.println("hash of empty block: " + Block.getHash(Block.getEmptyBlock()));
+            //System.out.println("block to string: ");
+            //System.out.println(winner.toString());
+            System.out.println("done");
+            // add the block and remove it's transactions from the transaction pool
+            //LedgerManager.addBlock();
             round++;
         }
     }
@@ -55,6 +64,9 @@ public class Algorand {
     public static Block runProposalStage() {
         /* Wait until client either has transactions or block proposals
             to process. Check every second */
+        // need to improve this
+        // could be proposals from last round sitting around
+        //
         while(ConnectionManager.proposedBlockQueue.isEmpty()
                 && ConnectionManager.transactionQueue.size() < Constants.BLOCK_SIZE) {
             try {
@@ -69,6 +81,9 @@ public class Algorand {
         if (ConnectionManager.transactionQueue.size() >= Constants.BLOCK_SIZE) {
             int priority = sortition(1000);
             if (priority > 0) {
+                // CHANGE THIS LATER (random priority helps get the agreement process going)
+                Random r = new Random();
+                priority = r.nextInt(1000);
                 proposedBlock = proposeBlock(priority);
             }
         }
@@ -112,6 +127,7 @@ public class Algorand {
                 if (block.round <= Algorand.round) {
                     block = ConnectionManager.proposedBlockQueue.take();
                     if (block.round == Algorand.round && block.priority > highestPriorityBlock.priority) {
+                        blockProposals.put(Block.getHash(block), block);
                         highestPriorityBlock = block;
                         highestPriorityProposalLock.lock();
                         try {
@@ -141,9 +157,14 @@ public class Algorand {
     public static Block proposeBlock(int priority) {
         Transaction[] transactions = new Transaction[Constants.BLOCK_SIZE];
         try {
-            transactions[0] = ConnectionManager.transactionQueue.take();
-            transactions[1] = ConnectionManager.transactionQueue.take();
-            Block block = new Block(transactions, Algorand.round, priority,"");
+            for(int i = 0; i < Constants.BLOCK_SIZE; i++) {
+                transactions[i] = ConnectionManager.transactionQueue.take();
+            }
+
+            String prevBlockHash = Block.getHash(LedgerManager.getLastBlock());
+            Block block = new Block(transactions, Algorand.round, priority, prevBlockHash);
+            blockProposals.put(Block.getHash(block), block);
+
             System.out.println("Proposing block with hash: " + Block.getHash(block));
             ConnectionManager.gossip(Message.MessageType.BLOCK, block, null);
             return block;
@@ -171,10 +192,10 @@ public class Algorand {
     }
 
     public static void committeeVote(int step, String blockHash) {
+        System.out.println("starting committeeVote on block hash " + blockHash + "...");
         // temporarily set to 1000 so always picked. will change
         int priority = sortition(1000);
         if (priority > 0) {
-            // have it pass a blockHashMessageObject that contains the fields that need to be passed
             String prevBlockHash = Block.getHash(LedgerManager.getLastBlock());
             BlockHashMessageData data = new BlockHashMessageData(round, step, prevBlockHash, blockHash);
             ConnectionManager.gossip(Message.MessageType.BLOCK_HASH, data, null);
@@ -182,11 +203,22 @@ public class Algorand {
     }
 
     public static Block runBAStar(Block block) {
-        System.out.println("block hash to send: " + Block.getHash(block));
+        System.out.println("Starting BA*...");
         String blockHash = reduction(Block.getHash(block));
-        /*String blockHashStar = binaryBAStar(blockHash);
-        String r = countVotes(Constants.VOTING_TIMEOUT);
-        if (blockHashStar.compareTo(r) == 0) {
+        String blockHashStar = binaryBAStar(blockHash);
+        System.out.println("blockHashStar: " + blockHashStar);
+        String r = countVotes(Steps.FINAL, Constants.VOTING_TIMEOUT);
+
+        // get the block for it
+        if (blockProposals.containsKey(blockHashStar)) {
+            System.out.println("found it");
+            return blockProposals.get(blockHashStar);
+        } else {
+            System.out.println("couldnt find it. need to ask a peer for it");
+            return block;
+        }
+
+        /*if (blockHashStar.compareTo(r) == 0) {
             // final consensus
             System.out.println("Reached final consensus");
             return block;
@@ -197,7 +229,6 @@ public class Algorand {
             return block;
             //return BlockOfHash(hblockStar);
         }*/
-        return block;
     }
 
     /**
@@ -207,18 +238,18 @@ public class Algorand {
      * @return agreed  upon hash
      */
     public static String reduction(String blockHash) {
-        System.out.println("Starting reduction");
+        System.out.println("Starting reduction...");
         // step 1: gossip block hash and get votes
-        committeeVote(0, blockHash);
-        String popularHash = countVotes(Constants.VOTING_TIMEOUT);
+        committeeVote(Steps.REDUCTION_ONE, blockHash);
+        String popularHash = countVotes(Steps.REDUCTION_ONE, Constants.VOTING_TIMEOUT);
         // step 2: re-gossip the popular block hash and get votes
         String emptyHash = Block.getHash(Block.getEmptyBlock());
         if (popularHash.compareTo("TIMEOUT") == 0) {
-            committeeVote(1, emptyHash);
+            committeeVote(Steps.REDUCTION_TWO, emptyHash);
         } else {
-            committeeVote(1, popularHash);
+            committeeVote(Steps.REDUCTION_TWO, popularHash);
         }
-        popularHash = countVotes(Constants.VOTING_TIMEOUT);
+        popularHash = countVotes(Steps.REDUCTION_TWO, Constants.VOTING_TIMEOUT);
         if (popularHash.compareTo("TIMEOUT") == 0) {
             return emptyHash;
         }
@@ -226,34 +257,36 @@ public class Algorand {
     }
 
     // need to make sure we are only working with messages from current round and step
-    public static String countVotes(double timeout) {
+    public static String countVotes(int step, double timeout) {
+        System.out.println("Counting votes...");
         long start = System.currentTimeMillis();
         Map<String, Integer> votes = new HashMap<>();
         Set<Integer> voters = new HashSet<>();
         while(true) {
             try {
                 if (ConnectionManager.blockHashQueue.isEmpty()) {
-                    double elapsedTime = (System.currentTimeMillis() - start) / 1000F;
+                    double elapsedTime = (System.currentTimeMillis() - start);
                     if (elapsedTime >= timeout) {
                         return "TIMEOUT";
                     }
                 } else {
+                    // will lose messages from later rounds this way
                     Message message = ConnectionManager.blockHashQueue.take();
-                    ProcessMessageObject values = processMessage(message);
-                    if (voters.contains(message.sourceAddress)) {
-                        continue;
+                    ProcessMessageObject data = processMessage(message);
+                    if (message.round < round || message.step < step ||
+                        voters.contains(message.sourceAddress) ||
+                        data.votes == 0) {
+                        continue; // discard the message
                     }
+
                     voters.add(message.sourceAddress);
                     String blockHash = message.blockHash;
-                    System.out.println("block hash received: " + blockHash);
                     if (votes.containsKey(blockHash)) {
                         votes.put(blockHash, votes.get(blockHash)+1);
                     } else {
                         votes.put(blockHash, 1);
                     }
                     if (votes.get(blockHash) >= (Constants.COMMITTEE_SIZE * Constants.COMMITTEE_SIZE_FACTOR)) {
-                        System.out.println("found a winner");
-                        System.out.println("winner is: " + blockHash);
                         return blockHash;
                     }
                 }
@@ -265,12 +298,11 @@ public class Algorand {
 
     private static ProcessMessageObject processMessage(Message message) {
         // verify signature
-
         // see if
-        String ledgerLastBlockHash = Block.getHash(LedgerManager.getLastBlock());
+        /*String ledgerLastBlockHash = Block.getHash(LedgerManager.getLastBlock());
         if (ledgerLastBlockHash.compareTo(message.prevBlockHash) != 0) {
             return new ProcessMessageObject(0, "");
-        }
+        }*/
 
         // verify the sorthash to get the number of votes
         // manually set votes to 1 right now
@@ -294,7 +326,7 @@ public class Algorand {
         String emptyHash = Block.getHash(Block.getEmptyBlock());
         while(step < Constants.BA_STAR_MAX_STEPS) {
             committeeVote(step, r);
-            r = countVotes(Constants.VOTING_TIMEOUT);
+            r = countVotes(step, Constants.VOTING_TIMEOUT);
             if (r.compareTo("TIMEOUT") == 0) {
                 r = blockHash;
             } else if (r.compareTo(emptyHash) != 0) {
@@ -304,13 +336,12 @@ public class Algorand {
                 if (step == 1) {
                     committeeVote(step, r);
                 }
-                System.out.println("Returning here!!!!!");
                 return r;
             }
             step++;
 
             committeeVote(step, r);
-            r = countVotes(Constants.VOTING_TIMEOUT);
+            r = countVotes(step, Constants.VOTING_TIMEOUT);
             if (r.compareTo("TIMEOUT") == 0) {
                 r = emptyHash;
             } else if (r.compareTo(emptyHash) == 0) {

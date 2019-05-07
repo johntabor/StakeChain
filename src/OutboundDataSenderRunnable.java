@@ -13,7 +13,7 @@ public class OutboundDataSenderRunnable implements Runnable {
             Socket connection = null;
             try {
                 Message message = ConnectionManager.outBoundMessageQueue.take();
-                System.out.println("OUTBOUND: " + message.type + " message to " + message.destinationAddress);
+                System.out.println("OUTBOUND: " + message.type + " to " + message.destinationAddress);
                 connection = new Socket();
                 connection.setReuseAddress(true);
                 connection.bind(new InetSocketAddress(ConnectionManager.outboundPort));

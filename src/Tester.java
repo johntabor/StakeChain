@@ -35,15 +35,21 @@ public class Tester {
                     Transaction tx = generateRandomValidTransaction();
                     System.out.println("tx: ");
                     System.out.println(tx.toString());
-                    sendTransaction(tx);
+                    int[] addresses = new int[4];
+                    addresses[0] = 5000;
+                    addresses[1] = 6000;
+                    addresses[2] = 7000;
+                    addresses[3] = 10000;
+                    Random r = new Random();
+                    sendTransaction(tx, addresses[r.nextInt(4)]);
                 }
             }
         }
     }
 
-    private void sendTransaction(Transaction tx) {
-        Message message = Message.buildTransactionMessage(PORT, CONNECT_PORT, tx);
-        try (Socket connection = new Socket("localhost", CONNECT_PORT)) {
+    private void sendTransaction(Transaction tx, int address) {
+        Message message = Message.buildTransactionMessage(PORT, address, tx);
+        try (Socket connection = new Socket("localhost", address)) {
             ObjectOutputStream outputStream = new ObjectOutputStream(connection.getOutputStream());
             outputStream.writeObject(message);
             outputStream.flush();
