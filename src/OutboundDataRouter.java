@@ -6,26 +6,20 @@ import java.net.*;
  * Runnable used for the thread that is responsible for sending messages
  * out to clients
  */
-public class OutboundDataSenderRunnable implements Runnable {
+public class OutboundDataRouter implements Runnable {
     @Override
     public void run() {
         while(true) {
+            Message message;
             Socket connection = null;
             try {
-                Message message = ConnectionManager.outBoundMessageQueue.take();
-                System.out.println("OUTBOUND: " + message.type + " to " + message.destinationAddress);
-                connection = new Socket();
-                connection.setReuseAddress(true);
-                connection.bind(new InetSocketAddress(ConnectionManager.outboundPort));
-                connection.connect(new InetSocketAddress("localhost", message.destinationAddress));
+                message = ConnectionManager.outBoundMessageQueue.take();
+                //System.out.println("OUTBOUND: " + message.type + " to " + message.destinationAddress);
+                connection = new Socket("127.0.0.1", message.destinationAddress);
                 ObjectOutputStream outputStream = new ObjectOutputStream(connection.getOutputStream());
                 outputStream.writeObject(message);
                 outputStream.flush();
             } catch (ConnectException e) {
-                // don't retry the message
-            } catch (NoRouteToHostException e) {
-                // don't retry the message
-            } catch (SocketException e) {
                 e.printStackTrace();
             } catch (IOException e) {
                 e.printStackTrace();

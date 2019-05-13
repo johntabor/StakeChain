@@ -1,34 +1,6 @@
 import java.util.Scanner;
 
-/*
-// treat address as the public key
-class Wallet {
-    private String address;
-
-    public String adjustTo64(String s) {
-        switch (s.length()) {
-            case 62:
-                return "00" + s;
-            case 63:
-                return "0" + s;
-            case 64:
-                return s;
-            default:
-                throw new IllegalArgumentException("not a valid key: " + s);
-        }
-    }
-
-    public Wallet(String address) {
-        this.address = address;
-    }
-}*/
-
-
 public class ClientNode {
-    /*
-     * Indicates whether or not the client is connected
-     * to the network
-     */
     private Thread algorand;
     private boolean connected = false;
 
@@ -41,9 +13,10 @@ public class ClientNode {
      * Connects the client to the network
      */
     private void connect() {
-        ConnectionManager.start();
         LedgerManager.start();
-        algorand = new Thread(new AlgorandRunnable());
+        ConnectionManager.start();
+        System.out.println("Starting algorand");
+        algorand = new Thread(new Algorand());
         algorand.start();
         connected = true;
     }
@@ -53,33 +26,17 @@ public class ClientNode {
      */
     private void disconnect() {
         ConnectionManager.stop();
+        algorand.interrupt();
         connected = false;
     }
 
     private void startCommandInterface() {
         Scanner sc = new Scanner(System.in);
-        System.out.println("Commands: (send <transaction>) (disconnect) (quit)");
+        System.out.println("Commands: (send <transaction>) (check <ledger block #>) (disconnect) (quit)");
         connect();
         while(true) {
-            //System.out.print("> ");
             String input = sc.nextLine();
             switch(input) {
-                /*
-                case "connect":
-                    if (connected) {
-                        System.out.println("Client already connected");
-                    } else {
-                        System.out.println("Connecting client...");
-                        connect();
-                    }
-
-                    try {
-                        Thread.sleep(500);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                    break;
-                 */
                 case "send":
                     if (!connected) {
                         System.out.println("Must connect to the network first");
@@ -95,11 +52,20 @@ public class ClientNode {
                         int amount = sc2.nextInt();
                         ConnectionManager.sendTransaction(id, source, recipient, amount);
                     }
-
-                    try {
-                        Thread.sleep(500);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+                    break;
+                case "check":
+                    if (!connected) {
+                        System.out.println("Must connect to the network first");
+                    } else {
+                        Scanner sc2 = new Scanner(System.in);
+                        System.out.println("Enter block number: ");
+                        int num = sc2.nextInt();
+                        Block block = LedgerManager.getBlock(num);
+                        if (block == null) {
+                            System.out.println("Block " + num + " doesn't exist.");
+                        } else {
+                            System.out.println("Block " + num + " hash: " + Block.getHash(block));
+                        }
                     }
                     break;
                 case "disconnect":
@@ -108,12 +74,6 @@ public class ClientNode {
                     } else {
                         System.out.println("Disconnecting client...");
                         disconnect();
-                    }
-
-                    try {
-                        Thread.sleep(500);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
                     }
                     break;
                 case "quit":
@@ -131,6 +91,12 @@ public class ClientNode {
                     return;
                 default:
                     System.out.println("Invalid command");
+            }
+
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }
     }

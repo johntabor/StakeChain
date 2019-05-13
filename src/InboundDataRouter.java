@@ -12,7 +12,7 @@ import java.util.Set;
  * requests from other clients and routing incoming
  * messages
  */
-public class InboundDataListenerRunnable implements Runnable {
+public class InboundDataRouter implements Runnable {
     @Override
     public void run() {
         try {
@@ -22,7 +22,7 @@ public class InboundDataListenerRunnable implements Runnable {
                 try {
                     ObjectInputStream inputStream = new ObjectInputStream(connection.getInputStream());
                     Message message = (Message) inputStream.readObject();
-                    System.out.println("INBOUND: " + message.type + " from " + message.sourceAddress);
+                    //System.out.println("INBOUND: " + message.type + " from " + message.sourceAddress);
                     switch(message.type) {
                         case GETADDR:
                             getaddr(message);
@@ -41,6 +41,19 @@ public class InboundDataListenerRunnable implements Runnable {
                             break;
                         case BLOCK_HASH:
                             block_hash(message);
+                            break;
+                        case BLOCK_CHAIN:
+                            block_chain(message);
+                            break;
+                        case BLOCK_CHAIN_RES:
+                            block_chain_res(message);
+                            break;
+                        case BLOCK_REQUEST:
+                            block_request(message);
+                            break;
+                        case BLOCK_REQUEST_RES:
+                            block_request_res(message);
+                            break;
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -65,10 +78,14 @@ public class InboundDataListenerRunnable implements Runnable {
      * @param message - message received from another client
      */
     private void getaddr(Message message) {
-        System.out.println("Requesting addresses from client at port " + message.sourceAddress);
-        List<Integer> addresses = new LinkedList<Integer>(ConnectionManager.knownClients);
-        Message response = Message.buildAddrResponseMessage(ConnectionManager.inboundPort, message.sourceAddress, addresses);
-        ConnectionManager.outBoundMessageQueue.add(response);
+        ConnectionManager.knownClientsLock.lock();
+        try {
+            List<Integer> addresses = new LinkedList<>(ConnectionManager.knownClients);
+            Message response = Message.buildAddrResponseMessage(ConnectionManager.inboundPort, message.sourceAddress, addresses);
+            ConnectionManager.outBoundMessageQueue.add(response);
+        } finally {
+            ConnectionManager.knownClientsLock.unlock();
+        }
     }
 
     /**
@@ -77,12 +94,9 @@ public class InboundDataListenerRunnable implements Runnable {
      * @param message - message received from another client
      */
     private void getaddr_res(Message message) {
-        System.out.println("Received address list");
         ConnectionManager.knownClientsLock.lock();
         try {
-            for(int address : message.addresses) {
-                ConnectionManager.knownClients.add(address);
-            }
+            ConnectionManager.knownClients.addAll(message.addresses);
         } finally {
             ConnectionManager.knownClientsLock.unlock();
         }
@@ -100,7 +114,6 @@ public class InboundDataListenerRunnable implements Runnable {
             if (!ConnectionManager.knownClients.contains(message.relayAddress)) {
                 ConnectionManager.knownClients.add(message.relayAddress);
                 gossip = true;
-
             }
         } finally {
             ConnectionManager.knownClientsLock.unlock();
@@ -134,34 +147,89 @@ public class InboundDataListenerRunnable implements Runnable {
      */
     private void transaction(Message message) {
         Transaction tx = message.transaction;
-        if (!LedgerManager.seenTransaction(tx)) {
+        if (!ConnectionManager.transactionsSeen.contains(tx.id)) {
+            ConnectionManager.transactionsSeen.add(tx.id);
+            ConnectionManager.transactionQueue.add(tx);
             Set<Integer> excludedAddresses = new HashSet<>();
             excludedAddresses.add(message.sourceAddress);
             ConnectionManager.gossip(Message.MessageType.TRANSACTION, tx, excludedAddresses);
-            ConnectionManager.transactionQueue.add(tx);
         }
     }
 
     /**
-     *
+     * Process a block proposal message
      * @param message - message received from another client
      */
     private void block(Message message) {
-        Algorand.highestPriorityProposalLock.lock();
-        try {
-            if (message.block.priority > Algorand.highestPriorityProposal) {
-                Algorand.highestPriorityProposal = message.block.priority;
-                Set<Integer> excludedAddresses = new HashSet<>();
-                excludedAddresses.add(message.sourceAddress);
-                ConnectionManager.gossip(Message.MessageType.BLOCK, message.block, excludedAddresses);
-                ConnectionManager.proposedBlockQueue.add(message.block);
-            }
-        } finally {
-            Algorand.highestPriorityProposalLock.unlock();
+        String blockHash = Block.getHash(message.block);
+        if (!ConnectionManager.blockProposalsSeen.contains(blockHash)) {
+            ConnectionManager.blockProposalsSeen.add(blockHash);
+            Set<Integer> excludedAddresses = new HashSet<>();
+            excludedAddresses.add(message.sourceAddress);
+            ConnectionManager.gossip(Message.MessageType.BLOCK, message.block, excludedAddresses);
+            ConnectionManager.proposedBlockQueue.add(message.block);
         }
     }
 
+    /**
+     * Process a block hash vote message.
+     * @param message
+     */
     private void block_hash(Message message) {
-        ConnectionManager.blockHashQueue.add(message);
+        String voteHash = Algorand.getVoteHash(message);
+        if (!ConnectionManager.blockHashVotesSeen.contains(voteHash)) {
+            ConnectionManager.blockHashVotesSeen.add(voteHash);
+            ConnectionManager.blockHashQueue.add(message);
+
+            Set<Integer> excludedAddresses = new HashSet<>();
+            excludedAddresses.add(message.sourceAddress);
+            excludedAddresses.add(message.voter);
+            BlockHashMessageData data = new BlockHashMessageData(
+                    message.voter, message.round, message.step, message.prevBlockHash, message.blockHash);
+            ConnectionManager.gossip(Message.MessageType.BLOCK_HASH, data, excludedAddresses);
+        }
+    }
+
+    private void block_chain(Message message) {
+        List<Block> data = new LinkedList<>(LedgerManager.getLedger());
+        data.remove(0); /* don't need to send genesis */
+        Message response = Message.buildBlockChainResMessage(ConnectionManager.inboundPort, message.sourceAddress, data);
+        ConnectionManager.outBoundMessageQueue.add(response);
+    }
+
+    private void block_chain_res(Message message) {
+        List<Block> data = message.blockchain;
+        LedgerManager.setLedger(data);
+    }
+
+    private void block_request(Message message) {
+        /* check ledger */
+        Block block = LedgerManager.getBlock(message.blockHash);
+        if (block == null) { /* check proposed block queue */
+            Set<Block> notIts = new HashSet<>();
+            while (!ConnectionManager.proposedBlockQueue.isEmpty()) {
+                try {
+                    Block proposedBlock = ConnectionManager.proposedBlockQueue.take();
+                    if (message.blockHash.compareTo(Block.getHash(proposedBlock)) == 0) {
+                        block = proposedBlock;
+                        break;
+                    } else {
+                        notIts.add(proposedBlock);
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            ConnectionManager.proposedBlockQueue.addAll(notIts);
+        }
+
+        if (block != null) {
+            Message response = Message.buildBlockReqResMessage(ConnectionManager.inboundPort, message.sourceAddress, block);
+            ConnectionManager.outBoundMessageQueue.add(response);
+        }
+    }
+
+    private void block_request_res(Message message) {
+        ConnectionManager.requestedBlockQueue.add(message.block);
     }
 }

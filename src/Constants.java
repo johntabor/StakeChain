@@ -11,7 +11,7 @@ public class Constants {
     /**
      * Percentage of the committee needed for a block hash to win a vote
      */
-    public static final float COMMITTEE_SIZE_FACTOR = (float)(2/3);
+    public static final double COMMITTEE_SIZE_FACTOR = 0.66;
     /**
      * Total currency supply
      */
@@ -33,9 +33,9 @@ public class Constants {
      */
     public static final int SEED_PORT = 9000;
 
-    public static final double VOTING_TIMEOUT = 2500;
+    public static final double VOTING_TIMEOUT = 2000;
     /**
      * Client will wait 5 seconds for proposed blocks
      */
-    public static final int PROPOSAL_TIMEOUT = 5000;
+    public static final int PROPOSAL_TIMEOUT = 3000;
 }

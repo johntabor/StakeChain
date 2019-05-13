@@ -1,26 +1,25 @@
+
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.net.*;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Random;
 import java.util.Scanner;
 
-// will assume that a node listening on port 5000 always exists
-// could also ask the dns seed server for the list of all nodes and randomly distribute transactions
-// that is a good idea
 public class Tester {
     private final int PORT = 9010;
     private final int CONNECT_PORT = 5000;
     private int currentTxId;
-    private Map<String, Integer> balances = new HashMap<>();
+    //private Map<String, Integer> balances = new HashMap<>();
+    private int[] balances = new int[Constants.BLOCK_SIZE];
+    private int[] newBalances = new int[Constants.BLOCK_SIZE];
 
     public Tester() {
         // populate initial wallet balances
         Block genesis = LedgerManager.buildGenesis();
         for (int i = 0; i < Constants.BLOCK_SIZE; i++) {
-            String address = "address" + i;
-            balances.put(address, genesis.transactions[i].amount);
+            //String address = "address" + i;
+            //balances.put(address, genesis.transactions[i].amount);
+            balances[i] = genesis.transactions[i].amount;
         }
         currentTxId = Constants.BLOCK_SIZE - 1;
 
@@ -35,14 +34,22 @@ public class Tester {
                     Transaction tx = generateRandomValidTransaction();
                     System.out.println("tx: ");
                     System.out.println(tx.toString());
-                    int[] addresses = new int[4];
+
+                    //int[] addresses = new int[6];
+
+                    /*
                     addresses[0] = 5000;
                     addresses[1] = 6000;
                     addresses[2] = 7000;
                     addresses[3] = 10000;
+                    addresses[4] = 9400;
+                    addresses[5] = 11000;
                     Random r = new Random();
-                    sendTransaction(tx, addresses[r.nextInt(4)]);
+                    sendTransaction(tx, addresses[r.nextInt(6)]); */
+                    //sendTransaction(tx,
+                    sendTransaction(tx, 5000);
                 }
+                balances = newBalances;
             }
         }
     }
@@ -64,17 +71,22 @@ public class Tester {
         int senderAddressNumber = -1;
         while(true) {
             senderAddressNumber = r.nextInt(Constants.BLOCK_SIZE);
-            if (balances.get("address" + senderAddressNumber) > 0) {
+            if (balances[senderAddressNumber] > 0) {
                 break;
             }
+            /*if (balances.get("address" + senderAddressNumber) > 0) {
+                break;
+            }*/
 
         }
 
         // get a valid, random amount to send
-        int balance = balances.get("address" + senderAddressNumber);
-        int amount = balance + 1;
+        int balance = balances[senderAddressNumber];
+        //int balance = balances.get("address" + senderAddressNumber);
+        int amount;
         while(true) {
-            amount = r.nextInt(balance) + 1;
+            amount = 1;
+            //amount = r.nextInt(balance) + 1;
             if (amount <= balance) {
                 break;
             }
@@ -88,6 +100,15 @@ public class Tester {
                 break;
             }
         }
+
+        // should really get balances from the ledger, BUT for now,
+        // change them here
+        newBalances[senderAddressNumber] = balances[senderAddressNumber] - amount;
+        newBalances[recipientAddressNumber] = balances[recipientAddressNumber] + amount;
+        //balances[senderAddressNumber] -= amount;
+        //balances[recipientAddressNumber] += amount;
+        //balances.put("address" + senderAddressNumber, balances.get("address" + senderAddressNumber) - amount);
+        //balances.put("address" + recipientAddressNumber, balances.get("address" + recipientAddressNumber) + amount);
 
         currentTxId++;
         String sender = "address" + senderAddressNumber;

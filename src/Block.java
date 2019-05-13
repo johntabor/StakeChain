@@ -5,6 +5,9 @@ import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
 import java.util.Date;
 
+/**
+ * Represents a block of transactions in the blockchain
+ */
 public class Block implements Serializable {
     public final Transaction[] transactions;
     public final int round;
@@ -13,10 +16,13 @@ public class Block implements Serializable {
     public final Timestamp timestamp;
     public final String prevBlockHash;
 
+    /* Empty block constructor */
     private Block() {
         this.transactions = new Transaction[Constants.BLOCK_SIZE];
-        transactions[0] = new Transaction(-1, "", "", -1);
-        transactions[1] = new Transaction(-1, "", "", -1);
+        for(int i = 0; i < Constants.BLOCK_SIZE; i++) {
+            this.transactions[i] = new Transaction(-1, "", "", -1);
+
+        }
         this.round = -1;
         this.priority = -1;
         this.seed = -1;
@@ -36,13 +42,23 @@ public class Block implements Serializable {
         this.prevBlockHash = prevBlockHash;
     }
 
+    /**
+     * Computes the hash of a block
+     * @param block - block to compute hash of
+     * @return hash of the block
+     */
     public static String getHash(Block block) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
+            StringBuilder transactionString = new StringBuilder();
+            for(int i = 0; i < Constants.BLOCK_SIZE; i++) {
+                transactionString.append(block.transactions[i].toString());
+            }
             String blockString =
-                    Integer.toString(block.transactions[0].amount) +
-                            Integer.toString(block.transactions[1].amount) +
-                            block.prevBlockHash + Integer.toString(block.round);
+                    transactionString.toString() +
+                    Integer.toString(block.round) +
+                    block.priority +
+                    block.prevBlockHash;
             byte[] digest = md.digest(blockString.getBytes());
             BigInteger i = new BigInteger(1, digest);
             String hash = i.toString(16);
@@ -53,10 +69,18 @@ public class Block implements Serializable {
         return null;
     }
 
+    /**
+     * Retrieves the empty block
+     * @return empty block
+     */
     public static Block getEmptyBlock() {
         return new Block();
     }
 
+    /**
+     * Prints out block information in a readable format
+     * @return block information
+     */
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
